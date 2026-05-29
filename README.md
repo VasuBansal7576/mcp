@@ -100,6 +100,47 @@ curl -X GET http://localhost:8003/api/underdog/health
 curl -X GET "http://localhost:8003/api/underdog/backtest/MSFT?strategy=rsi&initial_capital=5000"
 ```
 
+### 5. Local Testing & Quick Verification Guide
+
+To help you or your client verify and test this production-grade agent on a local machine without immediate API key requirements, we have included self-contained, automated test and seeding scripts directly in the `scripts/` directory:
+
+#### Step A: Seed Aligned Turnaround Candidates
+This script resets your local database and seeds it with three perfect turnaround candidates (`INTC`, `PYPL`, `GILD`) along with realistic and safe price histories, executive insider trade transactions, and news articles to support dry-run validation:
+```bash
+uv run python scripts/seed_perfect_underdogs.py
+```
+
+#### Step B: Run Zero-Cost Screener & Asset Allocation Plan
+This script runs the local database-driven **11-gate Underdog Stock Screener** and generates both **Standard Growth** (equity ETF hedged) and **Low-Risk** (U.S. Treasury cash-backed) `$1,000` capital asset allocation plans:
+```bash
+uv run python scripts/run_live_screening_allocation.py
+```
+
+#### Step C: Direct API Endpoint Queries
+Launch the HTTP development server using:
+```bash
+make dev
+```
+Then, query the HTTP API endpoints directly from your command line:
+* **Query the $1,000 Portfolio Asset Allocation Plan (Standard/Equity Safety Net)**:
+  ```bash
+  curl -X GET "http://localhost:8003/api/underdog/portfolio/allocate?capital=1000.0&low_risk=false"
+  ```
+* **Query the $1,000 Portfolio Asset Allocation Plan (Treasury/Cash Safety Net)**:
+  ```bash
+  curl -X GET "http://localhost:8003/api/underdog/portfolio/allocate?capital=1000.0&low_risk=true"
+  ```
+* **Trigger the 10-Minute Portfolio Trailing Stop-Loss Monitor**:
+  ```bash
+  curl -X GET "http://localhost:8003/api/underdog/portfolio/monitor?portfolio_name=My%20Portfolio"
+  ```
+
+#### Step D: Run the Complete Verified Test Suite
+Verify that all quantitative filters, stops, and edge cases are completely correct using our 918-test suite:
+```bash
+make test
+```
+
 ## Features
 
 - **Pre-seeded Database**: 520 S&P 500 stocks with comprehensive screening recommendations
