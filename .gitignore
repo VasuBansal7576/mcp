@@ -71,6 +71,9 @@ Thumbs.db
 
 # database
 *.db
+*.db-shm
+*.db-wal
+data/
 # Docker local overrides
 docker-compose.override.yml
 ta-lib/

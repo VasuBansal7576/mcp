@@ -17,6 +17,71 @@ from maverick_mcp.providers.openrouter_provider import (
 logger = logging.getLogger(__name__)
 
 
+def get_provider_llm() -> Any:
+    """Thin LLM provider abstraction that supports any OpenAI-compatible API via .env:
+    - LLM_PROVIDER=openai | deepseek | anthropic | openrouter
+    - LLM_API_KEY=sk-...
+    - LLM_MODEL=gpt-4o-mini | deepseek-chat | claude-3-sonnet | etc.
+    - LLM_BASE_URL=optional (for DeepSeek, OpenRouter, or local endpoints)
+    """
+    provider = os.getenv("LLM_PROVIDER", "").lower().strip()
+    api_key = os.getenv("LLM_API_KEY")
+    model = os.getenv("LLM_MODEL")
+    base_url = os.getenv("LLM_BASE_URL")
+
+    if not provider:
+        return None
+
+    logger.info(f"Initializing configured LLM Provider: {provider} (model: {model})")
+
+    if provider == "openai":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model or "gpt-4o-mini",
+            openai_api_key=api_key or os.getenv("OPENAI_API_KEY"),
+            openai_api_base=base_url,
+            temperature=0.3,
+            streaming=False,
+        )
+
+    elif provider == "deepseek":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model or "deepseek-chat",
+            openai_api_key=api_key or os.getenv("DEEPSEEK_API_KEY") or api_key,
+            openai_api_base=base_url or "https://api.deepseek.com",
+            temperature=0.3,
+            streaming=False,
+        )
+
+    elif provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(
+            model=model or "claude-3-haiku-20240307",
+            anthropic_api_key=api_key or os.getenv("ANTHROPIC_API_KEY"),
+            temperature=0.3,
+        )
+
+    elif provider == "openrouter":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=model or "google/gemini-2.5-flash",
+            openai_api_key=api_key or os.getenv("OPENROUTER_API_KEY"),
+            openai_api_base=base_url or "https://openrouter.ai/api/v1",
+            temperature=0.3,
+            streaming=False,
+        )
+
+    logger.warning(
+        f"Unknown LLM_PROVIDER '{provider}'. Falling back to original routing."
+    )
+    return None
+
+
 def get_llm(
     task_type: TaskType = TaskType.GENERAL,
     prefer_fast: bool = False,
@@ -35,14 +100,13 @@ def get_llm(
 
     Returns:
         An LLM instance optimized for the task.
-
-    Priority order:
-    1. OpenRouter API if OPENROUTER_API_KEY is available (with smart model selection)
-    2. OpenAI ChatOpenAI if OPENAI_API_KEY is available (fallback)
-    3. Anthropic ChatAnthropic if ANTHROPIC_API_KEY is available (fallback)
-    4. FakeListLLM as fallback for testing
     """
-    # Check for OpenRouter first (preferred)
+    # 1. Check for LLM_PROVIDER from .env first (thin provider agnostic abstraction)
+    provider_llm = get_provider_llm()
+    if provider_llm is not None:
+        return provider_llm
+
+    # 2. Check for OpenRouter (preferred)
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     if openrouter_api_key:
         logger.info(
@@ -57,7 +121,7 @@ def get_llm(
             model_override=model_override,
         )
 
-    # Fallback to OpenAI
+    # 3. Fallback to OpenAI
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if openai_api_key:
         logger.info("Falling back to OpenAI API")
@@ -68,7 +132,7 @@ def get_llm(
         except ImportError:
             pass
 
-    # Fallback to Anthropic
+    # 4. Fallback to Anthropic
     anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
     if anthropic_api_key:
         logger.info("Falling back to Anthropic API")
@@ -79,7 +143,7 @@ def get_llm(
         except ImportError:
             pass
 
-    # Final fallback to fake LLM for testing
+    # 5. Final fallback to fake LLM for testing
     logger.warning("No LLM API keys found - using FakeListLLM for testing")
     return FakeListLLM(
         responses=[

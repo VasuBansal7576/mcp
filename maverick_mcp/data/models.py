@@ -194,8 +194,141 @@ def ensure_database_schema(force: bool = False) -> bool:
                 logger.info("Ensuring database schema is up to date")
 
             Base.metadata.create_all(bind=engine)
+
+            # Dynamic alter table fallback to add newly introduced underdog columns safely
+            try:
+                from sqlalchemy import text
+
+                with engine.begin() as conn:
+                    try:
+                        conn.execute(text("SELECT roic FROM mcp_stocks LIMIT 1"))
+                    except Exception:
+                        logger.info("Adding roic column to mcp_stocks")
+                        conn.execute(
+                            text(
+                                "ALTER TABLE mcp_stocks ADD COLUMN roic NUMERIC(12, 4)"
+                            )
+                        )
+
+                    try:
+                        conn.execute(
+                            text("SELECT piotroski_f_score FROM mcp_stocks LIMIT 1")
+                        )
+                    except Exception:
+                        logger.info("Adding piotroski_f_score column to mcp_stocks")
+                        conn.execute(
+                            text(
+                                "ALTER TABLE mcp_stocks ADD COLUMN piotroski_f_score INTEGER"
+                            )
+                        )
+
+                    try:
+                        conn.execute(
+                            text(
+                                "SELECT peak_price FROM mcp_portfolio_positions LIMIT 1"
+                            )
+                        )
+                    except Exception:
+                        logger.info(
+                            "Adding peak_price column to mcp_portfolio_positions"
+                        )
+                        conn.execute(
+                            text(
+                                "ALTER TABLE mcp_portfolio_positions ADD COLUMN peak_price NUMERIC(12, 4)"
+                            )
+                        )
+
+                    try:
+                        conn.execute(
+                            text("SELECT next_earnings_date FROM mcp_stocks LIMIT 1")
+                        )
+                    except Exception:
+                        logger.info("Adding next_earnings_date column to mcp_stocks")
+                        conn.execute(
+                            text(
+                                "ALTER TABLE mcp_stocks ADD COLUMN next_earnings_date DATE"
+                            )
+                        )
+
+                    try:
+                        conn.execute(
+                            text("SELECT operating_cash_flow FROM mcp_stocks LIMIT 1")
+                        )
+                    except Exception:
+                        logger.info("Adding operating_cash_flow column to mcp_stocks")
+                        conn.execute(
+                            text(
+                                "ALTER TABLE mcp_stocks ADD COLUMN operating_cash_flow NUMERIC(20, 4)"
+                            )
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to dynamically add underdog columns: {e}")
+
             _schema_initialized = True
             return True
+
+        # Even if no tables are missing, ensure columns exist in existing schema
+        try:
+            from sqlalchemy import text
+
+            with engine.begin() as conn:
+                try:
+                    conn.execute(text("SELECT roic FROM mcp_stocks LIMIT 1"))
+                except Exception:
+                    logger.info("Adding roic column to mcp_stocks")
+                    conn.execute(
+                        text("ALTER TABLE mcp_stocks ADD COLUMN roic NUMERIC(12, 4)")
+                    )
+
+                try:
+                    conn.execute(
+                        text("SELECT piotroski_f_score FROM mcp_stocks LIMIT 1")
+                    )
+                except Exception:
+                    logger.info("Adding piotroski_f_score column to mcp_stocks")
+                    conn.execute(
+                        text(
+                            "ALTER TABLE mcp_stocks ADD COLUMN piotroski_f_score INTEGER"
+                        )
+                    )
+
+                try:
+                    conn.execute(
+                        text("SELECT peak_price FROM mcp_portfolio_positions LIMIT 1")
+                    )
+                except Exception:
+                    logger.info("Adding peak_price column to mcp_portfolio_positions")
+                    conn.execute(
+                        text(
+                            "ALTER TABLE mcp_portfolio_positions ADD COLUMN peak_price NUMERIC(12, 4)"
+                        )
+                    )
+
+                try:
+                    conn.execute(
+                        text("SELECT next_earnings_date FROM mcp_stocks LIMIT 1")
+                    )
+                except Exception:
+                    logger.info("Adding next_earnings_date column to mcp_stocks")
+                    conn.execute(
+                        text(
+                            "ALTER TABLE mcp_stocks ADD COLUMN next_earnings_date DATE"
+                        )
+                    )
+
+                try:
+                    conn.execute(
+                        text("SELECT operating_cash_flow FROM mcp_stocks LIMIT 1")
+                    )
+                except Exception:
+                    logger.info("Adding operating_cash_flow column to mcp_stocks")
+                    conn.execute(
+                        text(
+                            "ALTER TABLE mcp_stocks ADD COLUMN operating_cash_flow NUMERIC(20, 4)"
+                        )
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to dynamically add underdog columns: {e}")
 
         _schema_initialized = True
         return False
@@ -370,6 +503,19 @@ class Stock(Base, TimestampMixin):
     shares_outstanding = Column(BigInteger)
     is_etf = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True, index=True)
+
+    # Underdog fundamentals metadata
+    analyst_count = Column(Integer, default=0, nullable=True)
+    pe_ratio = Column(Numeric(12, 4), nullable=True)
+    fcf_growth_yoy = Column(Numeric(12, 4), nullable=True)
+    short_interest_declining = Column(Boolean, default=False, nullable=True)
+    insider_buying_6m = Column(Boolean, default=False, nullable=True)
+    short_interest = Column(Numeric(12, 4), nullable=True)
+    free_cash_flow = Column(Numeric(20, 4), nullable=True)
+    roic = Column(Numeric(12, 4), nullable=True, default=None)
+    piotroski_f_score = Column(Integer, nullable=True, default=None)
+    next_earnings_date = Column(Date, nullable=True, default=None)
+    operating_cash_flow = Column(Numeric(20, 4), nullable=True, default=None)
 
     # Relationships
     price_caches = relationship(
@@ -1780,6 +1926,7 @@ class PortfolioPosition(TimestampMixin, Base):
     total_cost = Column(Numeric(20, 4), nullable=False)  # Total capital invested
     purchase_date = Column(DateTime(timezone=True), nullable=False)  # Earliest purchase
     notes = Column(Text, nullable=True)  # Optional user notes
+    peak_price = Column(Numeric(12, 4), nullable=True, default=None)
 
     # Relationships
     portfolio = relationship("UserPortfolio", back_populates="positions")
@@ -1797,6 +1944,87 @@ class PortfolioPosition(TimestampMixin, Base):
 
 
 # Auth models removed for personal use - no multi-user functionality needed
+
+
+class InsiderTrade(Base, TimestampMixin):
+    """Insider trades model for storing Form 4 filing data from SEC EDGAR."""
+
+    __tablename__ = "mcp_insider_trades"
+
+    id = Column(get_primary_key_type(), primary_key=True, autoincrement=True)
+    stock_id = Column(
+        Uuid, ForeignKey("mcp_stocks.stock_id"), nullable=False, index=True
+    )
+    ticker = Column(String(10), nullable=False, index=True)
+    filer_name = Column(String(255), nullable=False)
+    relation = Column(String(100), nullable=True)
+    transaction_date = Column(Date, nullable=False, index=True)
+    transaction_type = Column(String(20), nullable=False)  # 'Buy' or 'Sell'
+    shares = Column(BigInteger, nullable=False)
+    price = Column(Numeric(12, 4), nullable=False)
+    total_value = Column(Numeric(20, 4), nullable=False)
+    filing_url = Column(String(500), nullable=True)
+
+    # Relationship
+    stock = relationship("Stock", backref="insider_trades")
+
+    def __repr__(self):
+        return f"<InsiderTrade(ticker={self.ticker}, filer={self.filer_name}, type={self.transaction_type}, value={self.total_value})>"
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "id": self.id,
+            "stock_id": str(self.stock_id),
+            "ticker": self.ticker,
+            "filer_name": self.filer_name,
+            "relation": self.relation,
+            "transaction_date": self.transaction_date.isoformat()
+            if self.transaction_date
+            else None,
+            "transaction_type": self.transaction_type,
+            "shares": self.shares,
+            "price": float(self.price) if self.price else 0.0,
+            "total_value": float(self.total_value) if self.total_value else 0.0,
+            "filing_url": self.filing_url,
+        }
+
+
+class Article(Base, TimestampMixin):
+    """RSS news article model."""
+
+    __tablename__ = "mcp_articles"
+
+    id = Column(get_primary_key_type(), primary_key=True, autoincrement=True)
+    stock_id = Column(
+        Uuid, ForeignKey("mcp_stocks.stock_id"), nullable=True, index=True
+    )
+    ticker = Column(String(10), nullable=False, index=True)
+    title = Column(String(500), nullable=False)
+    summary = Column(Text, nullable=True)
+    link = Column(String(500), nullable=True)
+    published_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    source = Column(String(100), nullable=False)  # Seeking Alpha, MarketWatch, Benzinga
+
+    # Relationship
+    stock = relationship("Stock", backref="articles")
+
+    def __repr__(self):
+        return f"<Article(ticker={self.ticker}, title={self.title[:30]}, source={self.source})>"
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "stock_id": str(self.stock_id) if self.stock_id else None,
+            "ticker": self.ticker,
+            "title": self.title,
+            "summary": self.summary,
+            "link": self.link,
+            "published_date": self.published_date.isoformat()
+            if self.published_date
+            else None,
+            "source": self.source,
+        }
 
 
 # ============================================================================

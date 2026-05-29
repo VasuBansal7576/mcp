@@ -351,11 +351,16 @@ logger.info("Tools registered successfully")
 from maverick_mcp.api.routers.health_enhanced import router as health_router
 from maverick_mcp.api.routers.monitoring import router as monitoring_router
 
-# Add monitoring and health endpoints to the FastMCP app's FastAPI instance
+# Add monitoring, health, and underdog agent endpoints to the FastMCP app's FastAPI instance
 if hasattr(mcp, "fastapi_app") and mcp.fastapi_app:
+    from maverick_mcp.api.routers.underdog import router as underdog_router
+
     mcp.fastapi_app.include_router(monitoring_router, tags=["monitoring"])
     mcp.fastapi_app.include_router(health_router, tags=["health"])
-    logger.info("Monitoring and health endpoints registered with FastAPI application")
+    mcp.fastapi_app.include_router(underdog_router)
+    logger.info(
+        "Monitoring, health, and underdog endpoints registered with FastAPI application"
+    )
 
     # Register top-level health endpoints for Docker HEALTHCHECK, load balancers,
     # and Kubernetes probes. These use the existing HealthChecker plus circuit
@@ -500,6 +505,21 @@ if hasattr(mcp, "fastapi_app") and mcp.fastapi_app:
 
             maverick_scheduler.start()
             logger.info("Service layer scheduler started on server loop")
+
+            # Register periodic trailing stop-loss portfolio monitor job
+            try:
+                from maverick_mcp.api.routers.underdog import run_portfolio_monitor_job
+
+                maverick_scheduler.add_interval_job(
+                    "underdog_portfolio_monitor",
+                    run_portfolio_monitor_job,
+                    minutes=10,
+                )
+                logger.info(
+                    "Registered periodic underdog portfolio monitor job (every 10m)."
+                )
+            except Exception as e:
+                logger.error(f"Failed to register periodic portfolio monitor job: {e}")
         except Exception as e:
             logger.error(f"Failed to start service layer scheduler: {e}")
 

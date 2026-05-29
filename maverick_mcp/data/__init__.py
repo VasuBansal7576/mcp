@@ -21,6 +21,12 @@ except ImportError:
 
 try:
     from .models import (
+        Article as _Article,
+    )
+    from .models import (
+        InsiderTrade as _InsiderTrade,
+    )
+    from .models import (
         MaverickBearStocks as _MaverickBearStocks,
     )
     from .models import (
@@ -59,6 +65,8 @@ try:
     PriceCache = _PriceCache
     SessionLocal = _SessionLocal
     Stock = _Stock
+    InsiderTrade = _InsiderTrade
+    Article = _Article
     SupplyDemandBreakoutStocks = _SupplyDemandBreakoutStocks
     bulk_insert_price_data = _bulk_insert_price_data
     ensure_database_schema = _ensure_database_schema
@@ -73,6 +81,8 @@ try:
             "MaverickStocks",
             "MaverickBearStocks",
             "SupplyDemandBreakoutStocks",
+            "InsiderTrade",
+            "Article",
             "SessionLocal",
             "get_db",
             "init_db",

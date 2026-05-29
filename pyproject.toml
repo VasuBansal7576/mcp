@@ -71,6 +71,7 @@ dependencies = [
     "plotly>=6.7.0",
     "seaborn>=0.13.2",
     "kaleido>=1.3.0", # Required for Plotly image export
+    "feedparser>=6.0.12",
 ]
 
 [project.optional-dependencies]

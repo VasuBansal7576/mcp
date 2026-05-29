@@ -296,3 +296,12 @@ class CostAccumulator:
         """
         async with self._lock:
             self._request_totals.pop(request_id, None)
+
+
+# Global singleton instance of CostAccumulator for tracking all LLM calls across the app
+_global_cost_accumulator = CostAccumulator()
+
+
+def get_global_cost_accumulator() -> CostAccumulator:
+    """Get the global CostAccumulator singleton instance."""
+    return _global_cost_accumulator

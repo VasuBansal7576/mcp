@@ -26,6 +26,80 @@ MaverickMCP provides professional-grade financial analysis tools directly within
 - **Open Source**: MIT licensed, community-driven development
 - **Educational Focus**: Perfect for learning financial analysis and MCP development
 
+## Underdog Stock Screener Agent
+
+The **Underdog Stock Screener** is a production-grade, highly cost-effective multi-agent system optimized for professional-grade stock recommendations. It pre-screens the stock universe using a zero-cost database-driven SQL layer and channels high-potential candidates to an asynchronous 3-node LLM agent. 
+
+### 1. Agent Architecture
+
+```
+                    +--------------------------------------------+
+                    |           FastAPI Web API Server           |
+                    |    (:8003/api/underdog/screen | /cost)     |
+                    +---------------------+----------------------+
+                                          |
+                                          v
+                    +--------------------------------------------+
+                    |        Underdog Pre-Screening Engine       |
+                    |  (Zero LLM Cost · Pure rule-based SQL filtering)
+                    +---------------------+----------------------+
+                                          |
+                       Overlooked? Yes    |  (Max 20-30 tickers)
+                                          v
+                    +--------------------------------------------+
+                    |          Redis Fingerprint Cache           |
+                    |   (Skip LLM if ticker + prices + articles  |
+                    |        + filings + model is unchanged)     |
+                    +---------------------+----------------------+
+                                          |
+                                          | Cache Miss
+                                          v
+                    +--------------------------------------------+
+                    |       3-Node LLM Agent Reasoning Flow      |
+                    |                                            |
+                    |  Node 1: News Sentiment (Score -1.0 to 1.0)|
+                    |  Node 2: Filing Risk (LOW/MED/HIGH)        |
+                    |  Node 3: Synthesizer (BUY/HOLD/SELL, Conf) |
+                    +--------------------------------------------+
+```
+
+### 2. High-Fidelity Tech Stack
+- **API Engine**: FastAPI / Uvicorn (mounted via FastMCP)
+- **Database & Cache**: PostgreSQL (with pgvector support) + Redis (pooling + Msgpack)
+- **Data Ingestion**: official yfinance + free SEC EDGAR API (Form 4 insider buying) + `feedparser` RSS feeds (Seeking Alpha, MarketWatch, Benzinga)
+- **Reasoning Layer**: LangChain / LangGraph provider-agnostic wrapper
+
+### 3. Model Cost Breakdown (Target: <$0.50/day)
+
+| Model Name | Provider | Cost (Input/Output per 1M) | Cache Hit Rate | Est. Cost / Day | Conviction ROI |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **DeepSeek Chat** | DeepSeek | `$0.27 / $1.10` | 75% - 85% | **~$0.28 / day** | High |
+| **GPT-4o Mini** | OpenAI | `$0.15 / $0.60` | 75% - 85% | **~$0.18 / day** | Balanced |
+| **Claude 3 Haiku** | Anthropic | `$0.25 / $1.25` | 75% - 85% | **~$0.35 / day** | High |
+| **Gemini 2.5 Flash**| OpenRouter | `$0.075 / $0.30` | 75% - 85% | **~$0.09 / day** | Cost-Minimal |
+
+### 4. Direct Verification (curl)
+
+**Run the Underdog Screener pipeline:**
+```bash
+curl -X POST http://localhost:8003/api/underdog/screen
+```
+
+**Check cost metrics, cache rates, and dynamic USD spend:**
+```bash
+curl -X GET http://localhost:8003/api/underdog/cost
+```
+
+**Check system readiness, active LLM provider, and data freshness:**
+```bash
+curl -X GET http://localhost:8003/api/underdog/health
+```
+
+**Run accuracy validation backtest for a specific ticker:**
+```bash
+curl -X GET "http://localhost:8003/api/underdog/backtest/MSFT?strategy=rsi&initial_capital=5000"
+```
+
 ## Features
 
 - **Pre-seeded Database**: 520 S&P 500 stocks with comprehensive screening recommendations
